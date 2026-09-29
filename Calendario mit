@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Eventos Age of Empires - El nuevo MIT</title>
+    <!-- SDK de Firebase para sincronización en tiempo real -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f141d;
+            --card-bg: #1a2232;
+            --accent-gold: #d4af37;
+            --accent-blue: #2a6fdb;
+            --accent-green: #27ae60;
+            --text-color: #f0f4f8;
+            --text-muted: #a0aec0;
+            --border-color: #2d3748;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); padding: 15px; position: relative; }
+        
+        .watermark {
+            position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%) rotate(-30deg);
+            font-size: clamp(2.5rem, 8vw, 6rem); font-weight: 900;
+            color: rgba(212, 175, 55, 0.05); pointer-events: none;
+            white-space: nowrap; z-index: 0; user-select: none; text-transform: uppercase;
+        }
+
+        .container { max-width: 800px; margin: 0 auto; position: relative; z-index: 1; }
+        header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid var(--accent-gold); padding-bottom: 10px; }
+        header h1 { color: var(--accent-gold); font-size: 1.5rem; text-transform: uppercase; }
+        
+        .card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 10px; padding: 15px; margin-bottom: 20px; }
+        .card-title { color: var(--accent-gold); font-size: 1.1rem; margin-bottom: 12px; font-weight: bold; }
+        
+        label { display: block; margin-bottom: 5px; color: var(--text-muted); font-size: 0.85rem; }
+        input, select, textarea { width: 100%; padding: 10px; background-color: #0d1117; border: 1px solid var(--border-color); border-radius: 6px; color: #fff; font-size: 1rem; margin-bottom: 10px; }
+        
+        .tz-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+        .tz-card { background-color: #121824; border-left: 4px solid var(--accent-gold); padding: 10px; border-radius: 5px; text-align: center; }
+        .tz-card.utc { border-left-color: var(--accent-blue); }
+        .tz-card.mx { border-left-color: #e74c3c; }
+        .tz-card.co { border-left-color: #f1c40f; }
+        .tz-card.ar { border-left-color: #3498db; }
+        .tz-country { font-size: 0.8rem; color: var(--text-muted); }
+        .tz-time { font-size: 1.2rem; font-weight: bold; }
+
+        .vote-item { background: #121824; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .vote-item.my-vote { border: 1px solid var(--accent-gold); background: #222b3e; }
+        
+        .btn { background: var(--accent-blue); color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .btn-success { background: var(--accent-green); }
+        .btn-gold { background: var(--accent-gold); color: #000; }
+        .btn-danger { background: #e74c3c; font-size: 0.8rem; }
+        .btn-voted { background: var(--accent-gold); color: #000; font-weight: bold; }
+        .vote-count { background: var(--border-color); padding: 5px 10px; border-radius: 15px; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+
+    <div class="watermark">El nuevo MIT</div>
+
+    <div class="container">
+        <header>
+            <h1>Calculadora de Eventos Age of Empires</h1>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">Votación en Vivo | Alliance MIT</p>
+        </header>
+
+        <!-- NOMBRE DEL EVENTO -->
+        <div class="card">
+            <div class="card-title">⚙️ Evento</div>
+            <label>Nombre del Evento:</label>
+            <input type="text" id="eventName" value="Guerra de Talleres / Conflicto Primordial" oninput="saveEventName()">
+        </div>
+
+        <!-- CONVERSOR UTC -->
+        <div class="card">
+            <div class="card-title">🌐 Conversor de Horarios</div>
+            <label>Hora UTC:</label>
+            <input type="time" id="utcInput" value="11:00" onchange="convertTime()">
+            
+            <div class="tz-grid">
+                <div class="tz-card utc"><div class="tz-country">🌐 UTC</div><div class="tz-time" id="tzUtc">11:00</div></div>
+                <div class="tz-card mx"><div class="tz-country">🇲🇽 México</div><div class="tz-time" id="tzMx">05:00</div></div>
+                <div class="tz-card co"><div class="tz-country">🇨🇴 Colombia</div><div class="tz-time" id="tzCo">06:00</div></div>
+                <div class="tz-card ar"><div class="tz-country">🇦🇷 Argentina</div><div class="tz-time" id="tzAr">08:00</div></div>
+            </div>
+        </div>
+
+        <!-- VOTACIÓN EN TIEMPO REAL (1 VOTO POR PERSONA) -->
+        <div class="card">
+            <div class="card-title">🗳️ Votación de Horarios (1 Voto por Persona)</div>
+            <div id="voteList">Cargando votos en tiempo real...</div>
+            
+            <div style="display: flex; gap: 8px; margin-top: 10px;">
+                <input type="time" id="newTimeUtc" value="15:00" style="margin-bottom:0;">
+                <button class="btn btn-gold" onclick="addVoteOption()">➕ Agregar Horario</button>
+            </div>
+        </div>
+
+        <!-- RESUMEN PARA WHATSAPP -->
+        <div class="card">
+            <div class="card-title">📋 Resumen para WhatsApp</div>
+            <textarea id="summaryText" rows="6" readonly></textarea>
+            <button class="btn btn-success" style="width: 100%;" onclick="copySummary()">📋 Copiar Resumen</button>
+        </div>
+    </div>
+
+    <script>
+        // OBTENER O CREAR UN ID ÚNICO PARA ESTE CELULAR/DISPOSITIVO
+        let voterId = localStorage.getItem('mit_voter_id');
+        if (!voterId) {
+            voterId = 'voter_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+            localStorage.setItem('mit_voter_id', voterId);
+        }
+
+        // CONFIGURACIÓN DE BASE DE DATOS EN LA NUBE (Firebase)
+        const firebaseConfig = {
+            databaseURL: "https://aoe-mit-default-rtdb.firebaseio.com/"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        function calcTimes(utcString) {
+            if (!utcString) return { utc: "--:--", mx: "--:--", co: "--:--", ar: "--:--" };
+            const [h, m] = utcString.split(':').map(Number);
+            const format = (hours) => `${String((hours + 24) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+            return {
+                utc: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`,
+                mx: format(h - 6),
+                co: format(h - 5),
+                ar: format(h - 3)
+            };
+        }
+
+        function convertTime() {
+            const times = calcTimes(document.getElementById('utcInput').value);
+            document.getElementById('tzUtc').innerText = times.utc;
+            document.getElementById('tzMx').innerText = times.mx;
+            document.getElementById('tzCo').innerText = times.co;
+            document.getElementById('tzAr').innerText = times.ar;
+        }
+
+        // Sincronización en tiempo real de votos y nombre de evento
+        let currentData = {};
+
+        db.ref('votes').on('value', (snapshot) => {
+            currentData = snapshot.val() || {};
+            renderVotes(currentData);
+        });
+
+        db.ref('eventName').on('value', (snapshot) => {
+            if (snapshot.val()) {
+                document.getElementById('eventName').value = snapshot.val();
+                updateSummaryText(currentData);
+            }
+        });
+
+        function saveEventName() {
+            const val = document.getElementById('eventName').value;
+            db.ref('eventName').set(val);
+        }
+
+        function renderVotes(data) {
+            const container = document.getElementById('voteList');
+            container.innerHTML = '';
+
+            Object.keys(data).forEach(key => {
+                const opt = data[key];
+                const times = calcTimes(opt.utc);
+                const votersMap = opt.voters || {};
+                const voteCount = Object.keys(votersMap).length;
+                const hasVotedThis = votersMap[voterId] === true;
+
+                const item = document.createElement('div');
+                item.className = `vote-item ${hasVotedThis ? 'my-vote' : ''}`;
+                
+                item.innerHTML = `
+                    <div>
+                        <strong>⏰ ${times.utc} UTC ${hasVotedThis ? '⭐ (Tu Voto)' : ''}</strong>
+                        <div style="font-size:0.8rem; color:#a0aec0;">MX: ${times.mx} | CO: ${times.co} | AR: ${times.ar}</div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="vote-count">🗳️ ${voteCount}</span>
+                        <button class="btn ${hasVotedThis ? 'btn-voted' : 'btn-success'}" onclick="castVote('${key}')">
+                            ${hasVotedThis ? '✓ Votado' : 'Votar'}
+                        </button>
+                        <button class="btn btn-danger" onclick="removeOption('${key}')">🗑️</button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+
+            updateSummaryText(data);
+        }
+
+        // RESTRICCIÓN: 1 Voto Total por Persona / Dispositivo
+        function castVote(targetKey) {
+            // 1. Quitar el voto de este usuario de TODOS los demás horarios
+            Object.keys(currentData).forEach(key => {
+                if (currentData[key].voters && currentData[key].voters[voterId]) {
+                    db.ref(`votes/${key}/voters/${voterId}`).remove();
+                }
+            });
+
+            // 2. Si hace clic en una opción que no tenía seleccionada, asignarla
+            const targetOption = currentData[targetKey];
+            const alreadyVotedThis = targetOption.voters && targetOption.voters[voterId];
+
+            if (!alreadyVotedThis) {
+                db.ref(`votes/${targetKey}/voters/${voterId}`).set(true);
+            }
+        }
+
+        function addVoteOption() {
+            const timeVal = document.getElementById('newTimeUtc').value;
+            if (!timeVal) return;
+            db.ref('votes').push({ utc: timeVal });
+        }
+
+        function removeOption(key) {
+            db.ref('votes/' + key).remove();
+        }
+
+        function updateSummaryText(data = {}) {
+            const name = document.getElementById('eventName').value || "Evento de Alianza";
+            let text = `🛡️ *[EL NUEVO MIT] ${name.toUpperCase()}* 🛡️\n\n📊 *VOTACIÓN DE HORARIOS (1 Voto x Jugador):*\n`;
+
+            Object.keys(data).forEach(key => {
+                const opt = data[key];
+                const times = calcTimes(opt.utc);
+                const voteCount = Object.keys(opt.voters || {}).length;
+                text += `\n• *${times.utc} UTC* (${voteCount} Votos)\n  🇲🇽 MX: ${times.mx} | 🇨🇴 CO: ${times.co} | 🇦🇷 AR: ${times.ar}\n`;
+            });
+
+            text += `\n───────────────\n💧 *El nuevo MIT*`;
+            document.getElementById('summaryText').value = text;
+        }
+
+        function copySummary() {
+            const copyText = document.getElementById('summaryText');
+            copyText.select();
+            navigator.clipboard.writeText(copyText.value);
+            alert("¡Resumen copiado con éxito!");
+        }
+
+        window.onload = convertTime;
+    </script>
+</body>
+</html>
